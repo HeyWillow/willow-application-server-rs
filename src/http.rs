@@ -25,7 +25,7 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
 
     let router = Router::new()
         .fallback(fallback)
-        .nest("/api", api_routes(Arc::clone(&state)))
+        .nest("/api", api_routes(&state))
         .route("/", get(get_root))
         .route("/ws", get(get_ws).with_state(Arc::clone(&state)))
         .layer(
