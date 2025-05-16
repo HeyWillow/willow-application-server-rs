@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use anyhow::anyhow;
 use axum::{
     extract::{
         State, WebSocketUpgrade,
@@ -14,6 +15,7 @@ use tokio::{
     sync::mpsc,
     time::{Instant, interval},
 };
+use uuid::Uuid;
 
 use crate::{
     state::SharedState,
@@ -56,7 +58,7 @@ async fn handle_ws(state: SharedState, headers: HeaderMap, ws: WebSocket) {
 
     let (msg_tx, msg_rx) = mpsc::channel::<Message>(32);
 
-    let client_id = state.next_id().await;
+    let client_id = Uuid::new_v4();
     state
         .connmgr()
         .write()
@@ -121,7 +123,7 @@ fn handle_ws_err(err: &axum::Error) {
 
 async fn handle_ws_msg_txt(
     state: &SharedState,
-    client_id: usize,
+    client_id: Uuid,
     msg: &Utf8Bytes,
 ) -> anyhow::Result<()> {
     let msg: WillowMsg = serde_json::from_str(msg)?;
@@ -134,9 +136,18 @@ async fn handle_ws_msg_txt(
         }
         WillowMsg::Hello(msg) => {
             let mut clients = state.clients().write().await;
-            clients[client_id].set_hostname(msg.hostname().clone());
-            clients[client_id].set_platform(msg.hw_type().clone());
-            clients[client_id].set_mac_addr(msg.mac_addr().clone());
+            clients
+                .get_mut(&client_id)
+                .ok_or_else(|| anyhow!("client with id {client_id} not found"))?
+                .set_hostname(msg.hostname().clone());
+            clients
+                .get_mut(&client_id)
+                .ok_or_else(|| anyhow!("client with id {client_id} not found"))?
+                .set_platform(msg.hw_type().clone());
+            clients
+                .get_mut(&client_id)
+                .ok_or_else(|| anyhow!("client with id {client_id} not found"))?
+                .set_mac_addr(msg.mac_addr().clone());
         }
         WillowMsg::WakeEnd(_) | WillowMsg::WakeStart(_) => {
             tracing::warn!("Willow One Wake not implemented yet");
@@ -150,7 +161,7 @@ pub async fn send_ping(state: SharedState) {
     loop {
         tokio::time::sleep(Duration::from_secs(10)).await;
 
-        let connected_client_ids: Vec<usize> =
+        let connected_client_ids: Vec<Uuid> =
             state.connmgr().read().await.keys().copied().collect();
 
         for id in connected_client_ids {
@@ -165,7 +176,7 @@ pub async fn send_ping(state: SharedState) {
 async fn ws_sender(
     mut ws_tx: SplitSink<WebSocket, Message>,
     mut msg_rx: mpsc::Receiver<Message>,
-    client_id: usize,
+    client_id: Uuid,
 ) {
     while let Some(msg) = msg_rx.recv().await {
         tracing::debug!("sending {msg:?} to client {client_id}");
