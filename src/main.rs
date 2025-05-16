@@ -1,4 +1,6 @@
-use willow_application_server_rs::{http::serve, trace::init_tracing, willow::worker::WorkerData};
+use willow_application_server_rs::{
+    http::serve, state::WasState, trace::init_tracing, willow::worker::WorkerData,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -6,7 +8,9 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("starting");
 
     let worker_data = WorkerData::create().await?;
-    tracing::debug!("{worker_data:#?}");
+    let state = WasState::new(worker_data);
+
+    tracing::debug!("{state:#?}");
 
     serve().await?;
 
