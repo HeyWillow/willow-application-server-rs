@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use axum::{
     extract::{
@@ -10,7 +10,10 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt, stream::SplitSink};
 use reqwest::header::USER_AGENT;
-use tokio::sync::mpsc;
+use tokio::{
+    sync::mpsc,
+    time::{Instant, interval},
+};
 
 use crate::{
     state::SharedState,
@@ -68,23 +71,42 @@ async fn handle_ws(state: SharedState, headers: HeaderMap, ws: WebSocket) {
 
     tokio::spawn(ws_sender(ws_tx, msg_rx, client_id));
 
-    while let Some(Ok(msg)) = ws_rx.next().await {
-        tracing::trace!("received WebSocket message: {msg:#?}");
+    let ping_interval = Duration::from_secs(10);
+    let mut interval = interval(ping_interval);
+    let mut last_pong = Instant::now();
+    let timeout = Duration::from_secs(15);
 
-        match msg {
-            Message::Binary(_) => {
-                tracing::error!("binary WebSocket messages not supported");
-            }
-            Message::Close(m) => todo!("close message {m:?}"),
-            Message::Ping(_) | Message::Pong(_) => {}
-            Message::Text(m) => {
-                tracing::trace!("received WebSocket TEXT message: {m:#?}");
-                if let Err(e) = handle_ws_msg_txt(Arc::clone(&state), client_id, &m).await {
-                    tracing::error!("{e}");
+    loop {
+        tokio::select! {
+                msg = ws_rx.next() => {
+                    if let Some(Ok(msg)) = msg {
+                        tracing::trace!("received WebSocket message: {msg:#?}");
+                        match msg {
+                            Message::Binary(_) => {
+                                tracing::error!("binary WebSocket messages not supported");
+                            }
+                            Message::Close(m) => todo!("close message {m:?}"),
+                            Message::Ping(_) => {}
+                            Message::Pong(_) => { last_pong = tokio::time::Instant::now(); }
+                            Message::Text(m) => {
+                                tracing::debug!("received WebSocket TEXT message: {m:#?}");
+                                if let Err(e) = handle_ws_msg_txt(&state, client_id, &m).await {
+                                    tracing::error!("{e}");
+                                }
+                            }
+                        }
+                    }
+                }
+                _ = interval.tick() => {
+                    if last_pong.elapsed() > timeout {
+                        tracing::info!("no PONG from client {client_id}");
+                        break;
                 }
             }
         }
     }
+
+    state.delete_client(client_id).await;
 }
 
 fn handle_ws_err(err: &axum::Error) {
@@ -92,7 +114,7 @@ fn handle_ws_err(err: &axum::Error) {
 }
 
 async fn handle_ws_msg_txt(
-    state: SharedState,
+    state: &SharedState,
     client_id: usize,
     msg: &Utf8Bytes,
 ) -> anyhow::Result<()> {
