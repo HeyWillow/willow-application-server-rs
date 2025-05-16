@@ -87,7 +87,10 @@ async fn handle_ws(state: SharedState, headers: HeaderMap, ws: WebSocket) {
                             }
                             Message::Close(m) => todo!("close message {m:?}"),
                             Message::Ping(_) => {}
-                            Message::Pong(_) => { last_pong = tokio::time::Instant::now(); }
+                            Message::Pong(_) => {
+                                tracing::debug!("got WebSocket PONG from client {client_id}");
+                                last_pong = Instant::now();
+                            }
                             Message::Text(m) => {
                                 tracing::debug!("received WebSocket TEXT message: {m:#?}");
                                 if let Err(e) = handle_ws_msg_txt(&state, client_id, &m).await {
