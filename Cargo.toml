@@ -6,7 +6,9 @@ license = "GPL-3.0-only"
 
 [dependencies]
 anyhow = "1.0.98"
+axum = { version = "0.8.4", features = ["ws"] }
 thiserror = "2.0.12"
+tokio = { version = "1.45.0", features = ["macros", "net", "rt-multi-thread"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 

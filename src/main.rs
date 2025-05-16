@@ -1,8 +1,11 @@
-use willow_application_server_rs::trace::init_tracing;
+use willow_application_server_rs::{http::serve, trace::init_tracing};
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     init_tracing()?;
     tracing::info!("starting");
+
+    serve().await?;
 
     Ok(())
 }
