@@ -1,11 +1,13 @@
 use axum::{
     extract::{
         WebSocketUpgrade,
-        ws::{Message, WebSocket},
+        ws::{Message, Utf8Bytes, WebSocket},
     },
     http::HeaderMap,
     response::IntoResponse,
 };
+
+use crate::willow::messages::WillowMsg;
 
 pub async fn get_ws(headers: HeaderMap, ws: WebSocketUpgrade) -> impl IntoResponse {
     tracing::debug!("{headers:#?}\n{ws:#?}");
@@ -27,7 +29,10 @@ async fn handle_ws(mut ws: WebSocket) {
             Message::Close(m) => todo!("close message {m:?}"),
             Message::Ping(_) | Message::Pong(_) => {}
             Message::Text(m) => {
-                tracing::debug!("received WebSocket TEXT message: {m:?}");
+                tracing::trace!("received WebSocket TEXT message: {m:#?}");
+                if let Err(e) = handle_ws_msg_txt(&m) {
+                    tracing::error!("{e}");
+                }
             }
         }
     }
@@ -35,4 +40,12 @@ async fn handle_ws(mut ws: WebSocket) {
 
 fn handle_ws_err(err: &axum::Error) {
     tracing::error!("{err}");
+}
+
+fn handle_ws_msg_txt(msg: &Utf8Bytes) -> anyhow::Result<()> {
+    let msg: WillowMsg = serde_json::from_str(msg)?;
+
+    tracing::debug!("{msg:#?}");
+
+    Ok(())
 }
