@@ -1,3 +1,4 @@
+use eui48::MacAddress;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -27,9 +28,10 @@ impl WillowMsgGoodbyeHello {
         &self.hw_type
     }
 
-    #[must_use]
-    pub fn mac_addr(&self) -> &[u8; 6] {
-        &self.mac_addr
+    /// # Errors
+    /// if the u8 slice cannot be converted to `MacAddress`
+    pub fn mac_addr(&self) -> anyhow::Result<MacAddress> {
+        Ok(MacAddress::from_bytes(&self.mac_addr)?)
     }
 }
 
