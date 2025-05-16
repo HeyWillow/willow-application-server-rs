@@ -13,7 +13,7 @@ pub enum WillowMsg {
 pub struct WillowMsgGoodbyeHello {
     hostname: String,
     hw_type: String,
-    mac_addr: Vec<u8>,
+    mac_addr: [u8; 6],
 }
 
 impl WillowMsgGoodbyeHello {
@@ -28,7 +28,7 @@ impl WillowMsgGoodbyeHello {
     }
 
     #[must_use]
-    pub fn mac_addr(&self) -> &Vec<u8> {
+    pub fn mac_addr(&self) -> &[u8; 6] {
         &self.mac_addr
     }
 }

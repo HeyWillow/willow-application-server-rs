@@ -147,7 +147,7 @@ async fn handle_ws_msg_txt(
             clients
                 .get_mut(&client_id)
                 .ok_or_else(|| anyhow!("client with id {client_id} not found"))?
-                .set_mac_addr(msg.mac_addr().clone());
+                .set_mac_addr(*msg.mac_addr());
         }
         WillowMsg::WakeEnd(_) | WillowMsg::WakeStart(_) => {
             tracing::warn!("Willow One Wake not implemented yet");
