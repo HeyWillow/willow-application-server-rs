@@ -7,7 +7,7 @@ use axum::{
 };
 use tokio::net::TcpListener;
 
-use crate::websocket::get_ws;
+use crate::{api::api_routes, websocket::get_ws};
 
 /// # Errors
 /// - if `TcpListener` cannot bind
@@ -15,8 +15,11 @@ use crate::websocket::get_ws;
 pub async fn serve() -> anyhow::Result<()> {
     let router = Router::new()
         .fallback(fallback)
+        .nest("/api", api_routes())
         .route("/", get(get_root))
         .route("/ws", get(get_ws));
+
+    tracing::debug!("{router:#?}");
 
     let port = 8502;
     let address = format!("[::]:{port}");
