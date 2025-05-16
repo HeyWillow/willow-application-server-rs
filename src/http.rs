@@ -11,7 +11,11 @@ use reqwest::{Method, header::CONTENT_TYPE};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
-use crate::{api::api_routes, state::SharedState, websocket::get_ws};
+use crate::{
+    api::api_routes,
+    state::SharedState,
+    websocket::{get_ws, send_ping},
+};
 
 /// # Errors
 /// - if `TcpListener` cannot bind
@@ -23,7 +27,7 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
         .fallback(fallback)
         .nest("/api", api_routes(Arc::clone(&state)))
         .route("/", get(get_root))
-        .route("/ws", get(get_ws).with_state(state))
+        .route("/ws", get(get_ws).with_state(Arc::clone(&state)))
         .layer(
             CorsLayer::new()
                 .allow_headers([CONTENT_TYPE])
@@ -37,6 +41,8 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let address = format!("[::]:{port}");
 
     let listener = TcpListener::bind(address).await?;
+
+    tokio::spawn(send_ping(Arc::clone(&state)));
 
     axum::serve(listener, router).await?;
 

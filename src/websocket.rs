@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     extract::{
@@ -116,6 +116,23 @@ async fn handle_ws_msg_txt(
     }
 
     Ok(())
+}
+
+pub async fn send_ping(state: SharedState) {
+    loop {
+        tokio::time::sleep(Duration::from_secs(10)).await;
+
+        let connected_client_ids: Vec<usize> =
+            state.connmgr().read().await.keys().copied().collect();
+
+        for id in connected_client_ids {
+            let ws = state.connmgr().read().await.get(&id).cloned();
+            if let Some(ws) = ws {
+                // we don't need to handle error here as failing to send PING will result in the client being disconnected due to no PONG
+                let _ = ws.send(Message::Ping("foo".into())).await;
+            }
+        }
+    }
 }
 
 async fn ws_sender(
