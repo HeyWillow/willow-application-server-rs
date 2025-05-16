@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use willow_application_server_rs::{
     http::serve, state::WasState, trace::init_tracing, willow::worker::WorkerData,
 };
@@ -12,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::debug!("{state:#?}");
 
-    serve().await?;
+    serve(Arc::new(state)).await?;
 
     Ok(())
 }

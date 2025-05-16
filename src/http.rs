@@ -7,15 +7,15 @@ use axum::{
 };
 use tokio::net::TcpListener;
 
-use crate::{api::api_routes, websocket::get_ws};
+use crate::{api::api_routes, state::SharedState, websocket::get_ws};
 
 /// # Errors
 /// - if `TcpListener` cannot bind
 /// - if axum server cannot be started
-pub async fn serve() -> anyhow::Result<()> {
+pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let router = Router::new()
         .fallback(fallback)
-        .nest("/api", api_routes())
+        .nest("/api", api_routes(state))
         .route("/", get(get_root))
         .route("/ws", get(get_ws));
 
