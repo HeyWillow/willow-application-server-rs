@@ -15,11 +15,11 @@ pub mod info;
 pub mod release;
 pub mod status;
 
-pub fn api_routes(state: SharedState) -> Router<()> {
+pub fn api_routes(state: &SharedState) -> Router<()> {
     Router::new()
-        .nest("/client", client_routes(Arc::clone(&state)))
-        .nest("/config", config_routes(Arc::clone(&state)))
+        .nest("/client", client_routes(Arc::clone(state)))
+        .nest("/config", config_routes(Arc::clone(state)))
         .nest("/info", info_routes())
-        .nest("/release", release_routes(Arc::clone(&state)))
-        .nest("/status", status_routes(state))
+        .nest("/release", release_routes(Arc::clone(state)))
+        .nest("/status", status_routes(Arc::clone(state)))
 }
