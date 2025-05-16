@@ -1,4 +1,8 @@
+use std::sync::Arc;
+
 use crate::willow::worker::WorkerData;
+
+pub type SharedState = Arc<WasState>;
 
 #[allow(dead_code)]
 #[derive(Debug)]
