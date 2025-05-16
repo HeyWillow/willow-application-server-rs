@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 pub enum WillowMsg {
     Goodbye(WillowMsgGoodbyeHello),
     Hello(WillowMsgGoodbyeHello),
+    WakeEnd(WillowMsgWakeEnd),
+    WakeStart(WillowMsgWakeStart),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -12,4 +14,12 @@ pub struct WillowMsgGoodbyeHello {
     hostname: String,
     hw_type: String,
     mac_addr: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WillowMsgWakeEnd {}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WillowMsgWakeStart {
+    wake_volume: f32,
 }
