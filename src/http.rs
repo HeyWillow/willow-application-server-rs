@@ -1,11 +1,13 @@
 use axum::{
     Json, Router,
     extract::Request,
-    http::StatusCode,
+    http::{HeaderValue, StatusCode},
     response::{Html, IntoResponse},
     routing::get,
 };
+use reqwest::{Method, header::CONTENT_TYPE};
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 
 use crate::{api::api_routes, state::SharedState, websocket::get_ws};
 
@@ -13,11 +15,19 @@ use crate::{api::api_routes, state::SharedState, websocket::get_ws};
 /// - if `TcpListener` cannot bind
 /// - if axum server cannot be started
 pub async fn serve(state: SharedState) -> anyhow::Result<()> {
+    let allow_origin = HeaderValue::from_str("http://localhost:3000")?;
+
     let router = Router::new()
         .fallback(fallback)
         .nest("/api", api_routes(state))
         .route("/", get(get_root))
-        .route("/ws", get(get_ws));
+        .route("/ws", get(get_ws))
+        .layer(
+            CorsLayer::new()
+                .allow_headers([CONTENT_TYPE])
+                .allow_methods([Method::GET, Method::POST])
+                .allow_origin(allow_origin),
+        );
 
     tracing::debug!("{router:#?}");
 
