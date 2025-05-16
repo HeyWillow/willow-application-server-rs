@@ -4,7 +4,7 @@ use serde::Serialize;
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct WillowClient {
     hostname: Option<String>,
-    mac_addr: Option<Vec<u8>>,
+    mac_addr: Option<[u8; 6]>,
     notification_active: bool,
     platform: Option<String>,
     version: String,
@@ -28,7 +28,7 @@ impl WillowClient {
         self.hostname = Some(hostname);
     }
 
-    pub fn set_mac_addr(&mut self, mac_addr: Vec<u8>) {
+    pub fn set_mac_addr(&mut self, mac_addr: [u8; 6]) {
         self.mac_addr = Some(mac_addr);
     }
 
