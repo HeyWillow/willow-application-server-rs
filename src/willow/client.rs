@@ -1,10 +1,11 @@
+use eui48::MacAddress;
 use serde::Serialize;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct WillowClient {
     hostname: Option<String>,
-    mac_addr: Option<[u8; 6]>,
+    mac_addr: Option<String>,
     notification_active: bool,
     platform: Option<String>,
     version: String,
@@ -28,8 +29,8 @@ impl WillowClient {
         self.hostname = Some(hostname);
     }
 
-    pub fn set_mac_addr(&mut self, mac_addr: [u8; 6]) {
-        self.mac_addr = Some(mac_addr);
+    pub fn set_mac_addr(&mut self, mac_addr: MacAddress) {
+        self.mac_addr = Some(mac_addr.to_hex_string());
     }
 
     pub fn set_platform(&mut self, hw_type: String) {
