@@ -16,7 +16,7 @@ tokio = { version = "1.45.0", features = ["macros", "net", "rt-multi-thread", "t
 tower-http = { version = "0.6.4", features = ["cors"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-uuid = { version = "1.16.0", features = ["fast-rng", "v4"] }
+uuid = { version = "1.16.0", features = ["fast-rng", "serde", "v4"] }
 
 [profile.release]
 codegen-units = 1

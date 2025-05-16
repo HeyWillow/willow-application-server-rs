@@ -7,7 +7,7 @@ use axum::{
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use crate::state::SharedState;
+use crate::{state::SharedState, willow::client::WillowClient};
 
 #[derive(Debug, Deserialize)]
 struct ApiPostClient {
@@ -43,8 +43,8 @@ pub fn client_routes(state: SharedState) -> Router<()> {
 
 async fn get_api_client(State(state): State<SharedState>) -> impl IntoResponse {
     tracing::debug!("GET /api/client");
-    let clients = state.clients().read().await;
-    Json(clients.clone())
+    let clients: Vec<WillowClient> = state.clients().read().await.values().cloned().collect();
+    Json(clients)
 }
 
 async fn post_api_client(
