@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     Json, Router,
     extract::Request,
@@ -19,9 +21,9 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
 
     let router = Router::new()
         .fallback(fallback)
-        .nest("/api", api_routes(state))
+        .nest("/api", api_routes(Arc::clone(&state)))
         .route("/", get(get_root))
-        .route("/ws", get(get_ws))
+        .route("/ws", get(get_ws).with_state(state))
         .layer(
             CorsLayer::new()
                 .allow_headers([CONTENT_TYPE])
