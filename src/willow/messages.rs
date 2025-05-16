@@ -16,6 +16,23 @@ pub struct WillowMsgGoodbyeHello {
     mac_addr: Vec<u8>,
 }
 
+impl WillowMsgGoodbyeHello {
+    #[must_use]
+    pub fn hostname(&self) -> &String {
+        &self.hostname
+    }
+
+    #[must_use]
+    pub fn hw_type(&self) -> &String {
+        &self.hw_type
+    }
+
+    #[must_use]
+    pub fn mac_addr(&self) -> &Vec<u8> {
+        &self.mac_addr
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct WillowMsgWakeEnd {}
 
