@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use eui48::MacAddress;
 use serde::Serialize;
 
@@ -5,6 +7,7 @@ use serde::Serialize;
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct WillowClient {
     hostname: Option<String>,
+    ip: String,
     mac_addr: Option<String>,
     notification_active: bool,
     platform: Option<String>,
@@ -13,8 +16,9 @@ pub struct WillowClient {
 
 impl WillowClient {
     #[must_use]
-    pub fn new(user_agent: &str) -> Self {
+    pub fn new(addr: SocketAddr, user_agent: &str) -> Self {
         Self {
+            ip: addr.ip().to_canonical().to_string(),
             version: user_agent.replace("Willow/", ""),
             ..Default::default()
         }
