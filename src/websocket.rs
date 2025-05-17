@@ -34,7 +34,7 @@ pub async fn get_ws(
         .on_upgrade(move |ws| handle_ws(state, addr, headers, ws))
 }
 
-async fn handle_ws(state: SharedState, _addr: SocketAddr, headers: HeaderMap, ws: WebSocket) {
+async fn handle_ws(state: SharedState, addr: SocketAddr, headers: HeaderMap, ws: WebSocket) {
     tracing::debug!("{ws:#?}");
 
     let (mut ws_tx, mut ws_rx) = ws.split();
@@ -70,7 +70,7 @@ async fn handle_ws(state: SharedState, _addr: SocketAddr, headers: HeaderMap, ws
         .clients()
         .write()
         .await
-        .insert(client_id, WillowClient::new(user_agent));
+        .insert(client_id, WillowClient::new(addr, user_agent));
 
     tokio::spawn(ws_sender(ws_tx, msg_rx, client_id));
 
