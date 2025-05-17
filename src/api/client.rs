@@ -25,14 +25,20 @@ enum ApiClientAction {
 }
 
 #[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "cmd")]
 enum WillowAction {
-    OtaStart,
+    OtaStart(WillowOtaStart),
     Restart,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+struct WillowOtaStart {
+    ota_url: String,
 }
 
 #[derive(Serialize)]
 struct WillowCommand {
+    #[serde(flatten)]
     cmd: WillowAction,
 }
 
@@ -75,7 +81,7 @@ async fn post_api_client(
                     cmd: WillowAction::Restart,
                 },
                 ApiClientAction::Update => WillowCommand {
-                    cmd: WillowAction::OtaStart,
+                    cmd: WillowAction::OtaStart(WillowOtaStart::default()),
                 },
             };
 
