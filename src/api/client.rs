@@ -11,12 +11,12 @@ use crate::{state::SharedState, willow::client::WillowClient};
 
 #[derive(Debug, Deserialize)]
 struct ApiPostClient {
-    action: WillowAction,
+    action: ApiClientAction,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum WillowAction {
+enum ApiClientAction {
     Config,
     Identify,
     Notify,
@@ -24,7 +24,14 @@ enum WillowAction {
     Update,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum WillowAction {
+    OtaStart,
+    Restart,
+}
+
+#[derive(Serialize)]
 struct WillowCommand {
     cmd: WillowAction,
 }
@@ -60,8 +67,16 @@ async fn post_api_client(
             let msg_tx = msg_tx.clone();
             drop(connmgr);
 
-            let cmd = WillowCommand {
-                cmd: query.action.clone(),
+            let cmd = match query.action {
+                ApiClientAction::Config | ApiClientAction::Identify | ApiClientAction::Notify => {
+                    todo!("not implemented")
+                }
+                ApiClientAction::Restart => WillowCommand {
+                    cmd: WillowAction::Restart,
+                },
+                ApiClientAction::Update => WillowCommand {
+                    cmd: WillowAction::OtaStart,
+                },
             };
 
             if let Ok(msg) = serde_json::to_string_pretty(&cmd) {
