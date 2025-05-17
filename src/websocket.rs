@@ -88,7 +88,10 @@ async fn handle_ws(state: SharedState, addr: SocketAddr, headers: HeaderMap, ws:
                             Message::Binary(_) => {
                                 tracing::error!("binary WebSocket messages not supported");
                             }
-                            Message::Close(m) => todo!("close message {m:?}"),
+                            Message::Close(_) => {
+                                tracing::debug!("got WebSocket CLOSE from client {client_id}");
+                                break;
+                            },
                             Message::Ping(_) => {}
                             Message::Pong(_) => {
                                 tracing::debug!("got WebSocket PONG from client {client_id}");
