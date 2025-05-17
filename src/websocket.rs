@@ -95,6 +95,9 @@ async fn handle_ws(state: SharedState, headers: HeaderMap, ws: WebSocket) {
                                 }
                             }
                         }
+                    } else {
+                        tracing::debug!("failed to read from WebSocket");
+                        break;
                     }
                 }
                 _ = interval.tick() => {
