@@ -2,12 +2,14 @@ use axum::{
     Json, Router,
     extract::{Query, State},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
 };
 use reqwest::StatusCode;
 use serde::Deserialize;
+use serde_json::Value;
+use strum::AsRefStr;
 
-use crate::state::SharedState;
+use crate::{state::SharedState, willow::messages::WillowMsgConfig};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -26,8 +28,34 @@ struct GetApiConfig {
     config_type: GetApiConfigType,
 }
 
+#[derive(AsRefStr, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+enum PostApiConfigType {
+    Config,
+    Nvs,
+    Was,
+}
+
+#[derive(Debug, Deserialize)]
+struct PostApiConfigBody {
+    #[serde(flatten)]
+    config: Option<Value>,
+    hostname: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PostApiConfigQuery {
+    apply: u8,
+    #[serde(rename = "type")]
+    config_type: PostApiConfigType,
+}
+
 pub fn config_routes(state: SharedState) -> Router<()> {
-    Router::new().route("/", get(get_api_config).with_state(state))
+    Router::new()
+        .route("/", get(get_api_config))
+        .route("/", post(post_api_config))
+        .with_state(state)
 }
 
 async fn get_api_config(
@@ -64,4 +92,48 @@ async fn get_api_config(
     }
 
     StatusCode::NOT_FOUND.into_response()
+}
+
+async fn post_api_config(
+    State(state): State<SharedState>,
+    Query(query): Query<PostApiConfigQuery>,
+    Json(parameters): Json<PostApiConfigBody>,
+) -> impl IntoResponse {
+    tracing::debug!("{parameters:?}");
+
+    let hostname = if query.apply == 1 {
+        parameters.hostname
+    } else {
+        None
+    };
+
+    match query.config_type {
+        PostApiConfigType::Config => {
+            if query.apply == 1 {
+                if let Some(hostname) = hostname {
+                    tracing::debug!("applying config to {hostname}");
+                    let msg_tx = state.get_msg_tx_by_hostname(&hostname).await.unwrap();
+                    let msg = WillowMsgConfig {
+                        config: state.db_pool().get_willow_config().await.unwrap(),
+                    };
+                    let msg = serde_json::to_string_pretty(&msg).unwrap();
+                    msg_tx.send(msg.into()).await.unwrap();
+                }
+            } else if let Some(config) = parameters.config {
+                state.db_pool().save_willow_config(&config).await.unwrap();
+            }
+        }
+        PostApiConfigType::Nvs => {
+            if query.apply == 1 {
+                if let Some(hostname) = hostname {
+                    tracing::debug!("applying nvs to {hostname}");
+                }
+            } else if let Some(nvs) = parameters.config {
+                state.db_pool().save_willow_nvs(&nvs).await.unwrap();
+            }
+        }
+        PostApiConfigType::Was => todo!("was config not implemented"),
+    }
+
+    Json("success").into_response()
 }
