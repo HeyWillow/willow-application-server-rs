@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -44,7 +44,11 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
 
     tokio::spawn(send_ping(Arc::clone(&state)));
 
-    axum::serve(listener, router).await?;
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
