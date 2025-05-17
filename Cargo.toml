@@ -6,7 +6,7 @@ license = "GPL-3.0-only"
 
 [dependencies]
 anyhow = "1.0.98"
-axum = { version = "0.8.4", features = ["ws"] }
+axum = { version = "0.8.4", features = ["macros", "ws"] }
 eui48 = { version = "1.1.0", features = ["serde"] }
 futures-util = "0.3.31"
 reqwest = { version = "0.12.15", features = ["h2", "http2", "json", "rustls-tls"], default-features = false }
@@ -14,6 +14,8 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 serde_with = "3.12.0"
 sqlx = { version = "0.8.5", features = ["any", "postgres", "runtime-tokio", "sqlite", "tls-rustls"] }
+strum = { version = "0.27.1", features = ["derive"] }
+strum_macros = "0.27.1"
 thiserror = "2.0.12"
 tokio = { version = "1.45.0", features = ["macros", "net", "rt-multi-thread", "time"] }
 tower-http = { version = "0.6.4", features = ["cors"] }

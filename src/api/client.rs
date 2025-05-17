@@ -1,13 +1,13 @@
+use anyhow::Context;
 use axum::{
     Json, Router,
     extract::{Query, State},
     response::IntoResponse,
     routing::{get, post},
 };
-use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use crate::{state::SharedState, willow::client::WillowClient};
+use crate::{error::WasApiError, state::SharedState, willow::client::WillowClient};
 
 #[derive(Debug, Deserialize)]
 struct ApiPostClient {
@@ -64,7 +64,7 @@ async fn post_api_client(
     State(state): State<SharedState>,
     query: Query<ApiPostClient>,
     Json(parameters): Json<PostClient>,
-) -> impl IntoResponse {
+) -> Result<Json<&'static str>, WasApiError> {
     tracing::debug!("POST /api/client - query: {query:?}, parameters: {parameters:?}");
 
     if let Ok(client_id) = state.get_client_id_by_hostname(&parameters.hostname).await {
@@ -85,15 +85,19 @@ async fn post_api_client(
                 },
             };
 
-            if let Ok(msg) = serde_json::to_string_pretty(&cmd) {
-                if let Err(e) = msg_tx.send(msg.into()).await {
-                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(format!("{e:?}")))
-                        .into_response();
-                }
-            }
+            let msg =
+                serde_json::to_string_pretty(&cmd).context("failed to serialize WillowCommand")?;
+
+            msg_tx.send(msg.into()).await.context(format!(
+                "failed to send WillowCommand to client with hostname {}",
+                parameters.hostname,
+            ))?;
         }
-        return (StatusCode::OK, Json(String::from("success"))).into_response();
+        return Ok(Json("success"));
     }
 
-    (StatusCode::INTERNAL_SERVER_ERROR, "client not found").into_response()
+    Err(WasApiError::InternalServerError(format!(
+        "client with hostname {} not found",
+        parameters.hostname,
+    )))
 }
