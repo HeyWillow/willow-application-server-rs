@@ -1,9 +1,9 @@
-use std::time::Duration;
+use std::{net::SocketAddr, time::Duration};
 
 use anyhow::anyhow;
 use axum::{
     extract::{
-        State, WebSocketUpgrade,
+        ConnectInfo, State, WebSocketUpgrade,
         ws::{Message, Utf8Bytes, WebSocket},
     },
     http::HeaderMap,
@@ -24,16 +24,17 @@ use crate::{
 
 pub async fn get_ws(
     State(state): State<SharedState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
     tracing::debug!("{headers:#?}\n{ws:#?}");
 
     ws.on_failed_upgrade(|err: axum::Error| handle_ws_err(&err))
-        .on_upgrade(move |ws| handle_ws(state, headers, ws))
+        .on_upgrade(move |ws| handle_ws(state, addr, headers, ws))
 }
 
-async fn handle_ws(state: SharedState, headers: HeaderMap, ws: WebSocket) {
+async fn handle_ws(state: SharedState, _addr: SocketAddr, headers: HeaderMap, ws: WebSocket) {
     tracing::debug!("{ws:#?}");
 
     let (mut ws_tx, mut ws_rx) = ws.split();
