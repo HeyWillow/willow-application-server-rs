@@ -1,6 +1,7 @@
 use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_with::skip_serializing_none;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
@@ -82,6 +83,7 @@ pub enum WillowWakeWord {
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Deserialize, Serialize)]
+#[skip_serializing_none]
 pub struct WillowConfig {
     #[serde(deserialize_with = "deserialize_string_to_bool")]
     aec: bool,
