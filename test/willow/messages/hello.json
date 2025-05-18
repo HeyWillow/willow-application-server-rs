@@ -1,0 +1,14 @@
+{
+    "hello": {
+        "hostname": "willow-7cdfa1e7a898",
+        "hw_type": "ESP32-S3-BOX",
+        "mac_addr": [
+            124,
+            223,
+            161,
+            231,
+            168,
+            152
+        ]
+    }
+}
