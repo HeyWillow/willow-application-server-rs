@@ -54,3 +54,61 @@ pub struct WillowMsgWakeEnd {}
 pub struct WillowMsgWakeStart {
     wake_volume: f32,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::Read};
+
+    use super::WillowMsg;
+
+    fn read_file(path: &str) -> String {
+        let mut buf = String::new();
+
+        File::open(path)
+            .unwrap_or_else(|e| panic!("failed to open testdata file '{path}': {e}"))
+            .read_to_string(&mut buf)
+            .unwrap_or_else(|e| panic!("failed to read testdata file '{path}': {e}"));
+
+        buf
+    }
+
+    #[test]
+    fn test_deserialize_hello() {
+        let test_data = read_file("test/willow/messages/hello.json");
+
+        let msg: WillowMsg =
+            serde_json::from_str(&test_data).expect("failed to deserialize hello message");
+        assert!(matches!(msg, WillowMsg::Hello(_)));
+        println!("{msg:?}");
+    }
+
+    #[test]
+    fn test_deserialize_goodbye() {
+        let test_data = read_file("test/willow/messages/goodbye.json");
+
+        let msg: WillowMsg =
+            serde_json::from_str(&test_data).expect("failed to deserialize goodbye message");
+        assert!(matches!(msg, WillowMsg::Goodbye(_)));
+        println!("{msg:?}");
+    }
+
+    #[test]
+    fn test_deserialize_wake_end() {
+        let test_data = read_file("test/willow/messages/wake_end.json");
+
+        let msg: WillowMsg =
+            serde_json::from_str(&test_data).expect("failed to deserialize wake_end message");
+        assert!(matches!(msg, WillowMsg::WakeEnd(_)));
+        println!("{msg:?}");
+    }
+
+    #[test]
+    fn test_deserialize_wake_start() {
+        let test_data = read_file("test/willow/messages/wake_start.json");
+
+        let msg: WillowMsg =
+            serde_json::from_str(&test_data).expect("failed to deserialize wake_start message");
+        assert!(matches!(msg, WillowMsg::WakeStart(_)));
+        println!("{msg:?}");
+    }
+}
