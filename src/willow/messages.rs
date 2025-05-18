@@ -10,6 +10,35 @@ pub enum WillowMsg {
     Hello(WillowMsgGoodbyeHello),
     WakeEnd(WillowMsgWakeEnd),
     WakeStart(WillowMsgWakeStart),
+    #[serde(untagged)]
+    Cmd(WillowMsgCmd),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WillowMsgCmdType {
+    Endpoint,
+    GetConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct WillowMsgCmd {
+    cmd: WillowMsgCmdType,
+    data: Option<WillowMsgCmdDataType>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WillowMsgCmdDataType {
+    #[serde(untagged)]
+    Endpoint(WillowMsgCmdEndpointData),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct WillowMsgCmdEndpointData {
+    text: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -70,6 +99,26 @@ mod tests {
             .unwrap_or_else(|e| panic!("failed to read testdata file '{path}': {e}"));
 
         buf
+    }
+
+    #[test]
+    fn test_deserialize_cmd_endpoint() {
+        let test_data = read_file("test/willow/messages/cmd_endpoint.json");
+
+        let msg: WillowMsg = serde_json::from_str(&test_data)
+            .expect("failed to deserialize command endpoint message");
+        assert!(matches!(msg, WillowMsg::Cmd(_)));
+        println!("{msg:?}");
+    }
+
+    #[test]
+    fn test_deserialize_cmd_get_config() {
+        let test_data = read_file("test/willow/messages/cmd_get_config.json");
+
+        let msg: WillowMsg = serde_json::from_str(&test_data)
+            .expect("failed to deserialize command get_config message");
+        assert!(matches!(msg, WillowMsg::Cmd(_)));
+        println!("{msg:?}");
     }
 
     #[test]
