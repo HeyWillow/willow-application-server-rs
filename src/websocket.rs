@@ -139,6 +139,9 @@ async fn handle_ws_msg_txt(
     tracing::debug!("{msg:#?}");
 
     match msg {
+        WillowMsg::Cmd(v) => {
+            tracing::debug!("{v:?}");
+        }
         WillowMsg::Goodbye(_) => {
             state.delete_client(client_id).await;
         }
