@@ -12,6 +12,7 @@ futures-util = "0.3.31"
 reqwest = { version = "0.12.15", features = ["h2", "http2", "json", "rustls-tls"], default-features = false }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
+serde_with = "3.12.0"
 sqlx = { version = "0.8.5", features = ["any", "postgres", "runtime-tokio", "sqlite", "tls-rustls"] }
 thiserror = "2.0.12"
 tokio = { version = "1.45.0", features = ["macros", "net", "rt-multi-thread", "time"] }
