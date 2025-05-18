@@ -1,7 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
+use anyhow::anyhow;
 use axum::extract::ws::Message;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{
+    RwLock,
+    mpsc::{self, Sender},
+};
 use uuid::Uuid;
 
 use crate::{
@@ -61,6 +65,19 @@ impl WasState {
         Err(anyhow::format_err!(
             "client with hostname {hostname} not found"
         ))
+    }
+
+    /// # Errors
+    /// - when no client with the specified hostname is found
+    /// - when client id is not found in connmgr
+    pub async fn get_msg_tx_by_hostname(&self, hostname: &str) -> anyhow::Result<Sender<Message>> {
+        let client_id = self.get_client_id_by_hostname(hostname).await?;
+        let connmgr = self.connmgr().read().await;
+        if let Some(msg_tx) = connmgr.get(&client_id) {
+            Ok(msg_tx.clone())
+        } else {
+            Err(anyhow!("client {client_id} not found in connmgr"))
+        }
     }
 
     pub fn db_pool(&self) -> &Pool {
