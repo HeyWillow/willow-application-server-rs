@@ -1,6 +1,8 @@
 use eui48::MacAddress;
 use serde::{Deserialize, Serialize};
 
+use super::config::{WillowConfig, WillowNvsConfig};
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WillowMsg {
@@ -8,6 +10,16 @@ pub enum WillowMsg {
     Hello(WillowMsgGoodbyeHello),
     WakeEnd(WillowMsgWakeEnd),
     WakeStart(WillowMsgWakeStart),
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct WillowMsgConfig {
+    pub config: WillowConfig,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct WillowMsgNvs {
+    pub config: WillowNvsConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
