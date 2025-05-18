@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use willow_application_server_rs::{
-    http::serve, state::WasState, trace::init_tracing, willow::worker::WorkerData,
+    db::pool::Pool, http::serve, state::WasState, trace::init_tracing, willow::worker::WorkerData,
 };
 
 #[tokio::main]
@@ -10,7 +10,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("starting");
 
     let worker_data = WorkerData::create().await?;
-    let state = WasState::new(worker_data);
+    let db_pool = Pool::create().await?;
+    let state = WasState::new(db_pool, worker_data);
 
     tracing::debug!("{state:#?}");
 

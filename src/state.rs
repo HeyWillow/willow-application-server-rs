@@ -4,7 +4,10 @@ use axum::extract::ws::Message;
 use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
 
-use crate::willow::{client::WillowClient, worker::WorkerData};
+use crate::{
+    db::pool::Pool,
+    willow::{client::WillowClient, worker::WorkerData},
+};
 
 pub type SharedState = Arc<WasState>;
 
@@ -15,15 +18,17 @@ type WebsocketClientMessageSender = mpsc::Sender<Message>;
 pub struct WasState {
     clients: RwLock<HashMap<Uuid, WillowClient>>,
     connmgr: RwLock<HashMap<Uuid, WebsocketClientMessageSender>>,
+    db_pool: Pool,
     worker_data: WorkerData,
 }
 
 impl WasState {
     #[must_use]
-    pub fn new(worker_data: WorkerData) -> Self {
+    pub fn new(db_pool: Pool, worker_data: WorkerData) -> Self {
         Self {
             clients: RwLock::new(HashMap::new()),
             connmgr: RwLock::new(HashMap::new()),
+            db_pool,
             worker_data,
         }
     }
@@ -56,6 +61,10 @@ impl WasState {
         Err(anyhow::format_err!(
             "client with hostname {hostname} not found"
         ))
+    }
+
+    pub fn db_pool(&self) -> &Pool {
+        &self.db_pool
     }
 
     #[must_use]
