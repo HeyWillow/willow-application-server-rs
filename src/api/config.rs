@@ -39,12 +39,20 @@ async fn get_api_config(
 
     match &query.config_type {
         GetApiConfigType::Config => {
-            if let Some(config) = worker_data.config() {
+            if query.default {
+                if let Some(config) = worker_data.config() {
+                    return Json(config).into_response();
+                }
+            } else if let Ok(config) = state.db_pool().get_willow_config().await {
                 return Json(config).into_response();
             }
         }
         GetApiConfigType::Nvs => {
-            if let Some(nvs) = worker_data.nvs() {
+            if query.default {
+                if let Some(nvs) = worker_data.nvs() {
+                    return Json(nvs).into_response();
+                }
+            } else if let Ok(nvs) = state.db_pool().get_willow_nvs().await {
                 return Json(nvs).into_response();
             }
         }
