@@ -6,12 +6,16 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::state::SharedState;
+use crate::{
+    endpoint::{Endpoint, WebSocketEndpoint},
+    state::SharedState,
+};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum StatusQueryType {
     Clients,
+    ConnMap,
 }
 
 #[derive(Deserialize)]
@@ -33,7 +37,19 @@ async fn get_api_status(
     match query.status_type {
         StatusQueryType::Clients => {
             let clients = state.clients().read().await;
-            Json(clients.clone())
+            Json(clients.clone()).into_response()
+        }
+        StatusQueryType::ConnMap => {
+            let endpoint = state.get_endpoint();
+            let endpoint = endpoint.lock().await;
+            match *endpoint {
+                Endpoint::WebSocket(ref endpoint) => match endpoint {
+                    WebSocketEndpoint::HomeAssistant(endpoint) => {
+                        let connmap = endpoint.connmap.read().await;
+                        Json(&*connmap).into_response()
+                    }
+                },
+            }
         }
     }
 }
