@@ -18,10 +18,13 @@ strum = { version = "0.27.1", features = ["derive"] }
 strum_macros = "0.27.1"
 thiserror = "2.0.12"
 tokio = { version = "1.45.0", features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio-tungstenite = { version = "0.26.2", features = ["rustls-tls-webpki-roots"] }
 tower-http = { version = "0.6.4", features = ["cors"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-uuid = { version = "1.16.0", features = ["fast-rng", "serde", "v4"] }
+tungstenite = { version = "0.26.2", features = ["url"] }
+url = "2.5.4"
+uuid = { version = "1.16.0", features = ["fast-rng", "serde", "v4", "v7"] }
 
 [profile.release]
 codegen-units = 1

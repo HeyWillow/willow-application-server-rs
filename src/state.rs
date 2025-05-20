@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::anyhow;
 use axum::extract::ws::Message;
+use futures_util::lock::Mutex;
 use tokio::sync::{
     RwLock,
     mpsc::{self, Sender},
@@ -10,9 +11,12 @@ use uuid::Uuid;
 
 use crate::{
     db::pool::Pool,
+    endpoint::Endpoint,
     willow::{client::WillowClient, worker::WorkerData},
 };
 
+pub type Clients = RwLock<HashMap<Uuid, WillowClient>>;
+pub type ConnMgr = Arc<RwLock<HashMap<Uuid, WebsocketClientMessageSender>>>;
 pub type SharedState = Arc<WasState>;
 
 type WebsocketClientMessageSender = mpsc::Sender<Message>;
@@ -20,19 +24,26 @@ type WebsocketClientMessageSender = mpsc::Sender<Message>;
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct WasState {
-    clients: RwLock<HashMap<Uuid, WillowClient>>,
-    connmgr: RwLock<HashMap<Uuid, WebsocketClientMessageSender>>,
+    clients: Clients,
+    connmgr: ConnMgr,
     db_pool: Pool,
+    endpoint: Arc<Mutex<Endpoint>>,
     worker_data: WorkerData,
 }
 
 impl WasState {
     #[must_use]
-    pub fn new(db_pool: Pool, worker_data: WorkerData) -> Self {
+    pub fn new(
+        connmgr: ConnMgr,
+        db_pool: Pool,
+        endpoint: Endpoint,
+        worker_data: WorkerData,
+    ) -> Self {
         Self {
             clients: RwLock::new(HashMap::new()),
-            connmgr: RwLock::new(HashMap::new()),
+            connmgr,
             db_pool,
+            endpoint: Arc::new(Mutex::new(endpoint)),
             worker_data,
         }
     }
@@ -82,6 +93,10 @@ impl WasState {
 
     pub fn db_pool(&self) -> &Pool {
         &self.db_pool
+    }
+
+    pub fn get_endpoint(&self) -> Arc<Mutex<Endpoint>> {
+        Arc::clone(&self.endpoint)
     }
 
     #[must_use]

@@ -19,6 +19,7 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
+    endpoint::SendCommand,
     state::SharedState,
     willow::{client::WillowClient, messages::WillowMsg},
 };
@@ -29,7 +30,7 @@ pub async fn get_ws(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    tracing::debug!("{headers:#?}\n{ws:#?}");
+    tracing::trace!("{headers:#?}\n{ws:#?}");
 
     let Some(user_agent) = headers.get(USER_AGENT) else {
         let msg = "client missing User Agent header";
@@ -44,6 +45,9 @@ pub async fn get_ws(
     };
 
     let client_id = Uuid::new_v4();
+
+    tracing::info!("client {addr} assigned id {client_id}");
+
     state
         .clients()
         .write()
@@ -141,6 +145,9 @@ async fn handle_ws_msg_txt(
     match msg {
         WillowMsg::Cmd(v) => {
             tracing::debug!("{v:?}");
+            let endpoint = state.get_endpoint();
+            let mut endpoint = endpoint.lock().await;
+            endpoint.send_cmd(v, client_id).await?;
         }
         WillowMsg::Goodbye(_) => {
             state.delete_client(client_id).await;

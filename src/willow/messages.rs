@@ -24,8 +24,8 @@ pub enum WillowMsgCmdType {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct WillowMsgCmd {
-    cmd: WillowMsgCmdType,
-    data: Option<WillowMsgCmdDataType>,
+    pub cmd: WillowMsgCmdType,
+    pub data: Option<WillowMsgCmdDataType>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -39,6 +39,17 @@ pub enum WillowMsgCmdDataType {
 #[serde(rename_all = "snake_case")]
 pub struct WillowMsgCmdEndpointData {
     text: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WillowMsgCmdEndpointResult<'a> {
+    pub result: WillowMsgCmdEndpointResultData<'a>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WillowMsgCmdEndpointResultData<'a> {
+    pub ok: bool,
+    pub speech: &'a str,
 }
 
 #[derive(Deserialize, Serialize)]

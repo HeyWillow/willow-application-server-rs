@@ -1,7 +1,9 @@
 use std::{fmt::Display, str::FromStr};
 
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::skip_serializing_none;
+use url::Url;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
@@ -20,7 +22,7 @@ enum WillowAudioResponseType {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
-enum WillowCommandEndpoint {
+pub enum WillowCommandEndpoint {
     #[serde(rename = "Home Assistant")]
     HomeAssistant,
     #[serde(rename = "openHAB")]
@@ -156,6 +158,65 @@ pub struct WillowConfig {
     wis_tts_url: Option<String>,
     wis_tts_url_v2: Option<String>,
     wis_url: String,
+}
+
+impl WillowConfig {
+    #[must_use]
+    pub fn get_endpoint(&self) -> &WillowCommandEndpoint {
+        &self.command_endpoint
+    }
+
+    /// # Errors
+    /// - if we can't get endpoint token from `WillowConfig`
+    pub fn get_endpoint_token(&self) -> Result<String> {
+        match self.command_endpoint {
+            WillowCommandEndpoint::HomeAssistant => self.get_hass_token(),
+            _ => todo!(),
+        }
+    }
+
+    /// # Errors
+    /// For `WillowCommandEndpoint::HomeAssistant`:
+    /// - if `WillowConfig` doesn't contain `hass_host`
+    /// - if `WillowConfig` doesn't contain `hass_port`
+    /// - if `WillowConfig` doesn't contain `hass_tls`
+    /// - if parsing the constructed URL fails
+    pub fn get_endpoint_url(&self) -> Result<Url> {
+        let url = match self.command_endpoint {
+            WillowCommandEndpoint::HomeAssistant => {
+                let scheme = if self.get_hass_tls()? {
+                    "wss://"
+                } else {
+                    "ws://"
+                };
+                let base = format!(
+                    "{scheme}{}:{}/api/websocket",
+                    self.get_hass_host()?,
+                    self.get_hass_port()?
+                );
+                Url::parse(&base)?
+            }
+            _ => todo!(),
+        };
+
+        Ok(url)
+    }
+
+    fn get_hass_host(&self) -> Result<String> {
+        self.hass_host.clone().ok_or(anyhow!("hass_host missing"))
+    }
+
+    fn get_hass_port(&self) -> Result<u16> {
+        self.hass_port.ok_or(anyhow!("hass_port missing"))
+    }
+
+    fn get_hass_tls(&self) -> Result<bool> {
+        self.hass_tls.ok_or(anyhow!("hass_tls missing"))
+    }
+
+    fn get_hass_token(&self) -> Result<String> {
+        self.hass_token.clone().ok_or(anyhow!("hass_host missing"))
+    }
 }
 
 #[derive(Deserialize, Serialize)]
