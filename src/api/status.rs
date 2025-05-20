@@ -5,6 +5,7 @@ use axum::{
     routing::get,
 };
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     endpoint::{Endpoint, WebSocketEndpoint},
@@ -16,6 +17,7 @@ use crate::{
 enum StatusQueryType {
     Clients,
     ConnMap,
+    ConnMgr,
 }
 
 #[derive(Deserialize)]
@@ -50,6 +52,11 @@ async fn get_api_status(
                     }
                 },
             }
+        }
+        StatusQueryType::ConnMgr => {
+            let connected_clients: Vec<Uuid> =
+                state.connmgr().read().await.keys().copied().collect();
+            Json(connected_clients).into_response()
         }
     }
 }
