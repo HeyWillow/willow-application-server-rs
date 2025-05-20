@@ -85,6 +85,12 @@ async fn handle_ws(state: SharedState, addr: SocketAddr, headers: HeaderMap, ws:
                     if let Some(Ok(msg)) = msg {
                         tracing::trace!("received WebSocket message: {msg:#?}");
                         match msg {
+                            Message::Text(m) => {
+                                tracing::debug!("received WebSocket TEXT message: {m:#?}");
+                                if let Err(e) = handle_ws_msg_txt(&state, client_id, &m).await {
+                                    tracing::error!("{e}");
+                                }
+                            }
                             Message::Binary(_) => {
                                 tracing::error!("binary WebSocket messages not supported");
                             }
@@ -97,12 +103,7 @@ async fn handle_ws(state: SharedState, addr: SocketAddr, headers: HeaderMap, ws:
                                 tracing::debug!("got WebSocket PONG from client {client_id}");
                                 last_pong = Instant::now();
                             }
-                            Message::Text(m) => {
-                                tracing::debug!("received WebSocket TEXT message: {m:#?}");
-                                if let Err(e) = handle_ws_msg_txt(&state, client_id, &m).await {
-                                    tracing::error!("{e}");
-                                }
-                            }
+
                         }
                     } else {
                         tracing::debug!("failed to read from WebSocket");
