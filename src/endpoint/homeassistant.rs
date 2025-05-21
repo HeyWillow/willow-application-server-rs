@@ -9,7 +9,7 @@ use futures_util::{
 use serde::{Deserialize, Serialize};
 use tokio::{
     net::TcpStream,
-    sync::{RwLock, mpsc},
+    sync::{Mutex, RwLock, mpsc},
     time::{Instant, interval},
 };
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
@@ -32,6 +32,7 @@ type ConnMap = Arc<RwLock<HashMap<u64, Uuid>>>;
 pub struct HomeAssistantWebSocketEndpoint {
     pub connmap: ConnMap,
     pub connmgr: ConnMgr,
+    pub next_id: Arc<Mutex<u64>>,
     pub sender: Option<mpsc::Sender<Message>>,
     pub token: String,
     pub url: Url,
@@ -44,6 +45,7 @@ impl SendCommand for HomeAssistantWebSocketEndpoint {
                 WillowMsgCmdDataType::Endpoint(data) => {
                     tracing::debug!("{data:?}");
                     let msg = HomeAssistantWebSocketIntentMessage {
+                        id: self.next_id().await,
                         input: Some(data),
                         ..Default::default()
                     };
@@ -74,11 +76,6 @@ impl SendCommand for HomeAssistantWebSocketEndpoint {
     }
 }
 
-fn gen_ha_id() -> u64 {
-    let (id, _) = Uuid::now_v7().as_u64_pair();
-    id
-}
-
 #[derive(Serialize)]
 pub struct HomeAssistantWebSocketIntentMessage {
     id: u64,
@@ -94,7 +91,7 @@ pub struct HomeAssistantWebSocketIntentMessage {
 impl Default for HomeAssistantWebSocketIntentMessage {
     fn default() -> Self {
         Self {
-            id: gen_ha_id(),
+            id: 0,
             end_stage: default_intent(),
             input: None,
             start_stage: default_intent(),
@@ -117,6 +114,7 @@ impl HomeAssistantWebSocketEndpoint {
         Self {
             connmap: Arc::new(RwLock::new(HashMap::new())),
             connmgr,
+            next_id: Arc::new(Mutex::new(1)),
             sender: None,
             token,
             url,
@@ -147,6 +145,14 @@ impl HomeAssistantWebSocketEndpoint {
         tokio::spawn(endpoint_ws_sender(ws_tx, msg_rx));
 
         Ok(())
+    }
+
+    pub async fn next_id(&self) -> u64 {
+        let mut id = self.next_id.lock().await;
+        let id_current = *id;
+        *id += 1;
+
+        id_current
     }
 }
 

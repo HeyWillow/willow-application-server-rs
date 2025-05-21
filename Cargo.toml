@@ -24,7 +24,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tungstenite = { version = "0.26.2", features = ["url"] }
 url = "2.5.4"
-uuid = { version = "1.16.0", features = ["fast-rng", "serde", "v4", "v7"] }
+uuid = { version = "1.16.0", features = ["fast-rng", "serde", "v4"] }
 
 [profile.release]
 codegen-units = 1
