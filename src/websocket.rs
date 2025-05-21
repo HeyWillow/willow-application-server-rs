@@ -2,6 +2,7 @@ use std::{net::SocketAddr, time::Duration};
 
 use anyhow::anyhow;
 use axum::{
+    Json,
     extract::{
         ConnectInfo, State, WebSocketUpgrade,
         ws::{Message, Utf8Bytes, WebSocket},
@@ -10,7 +11,7 @@ use axum::{
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt, stream::SplitSink};
-use reqwest::header::USER_AGENT;
+use reqwest::{StatusCode, header::USER_AGENT};
 use tokio::{
     sync::mpsc,
     time::{Instant, interval},
@@ -30,47 +31,48 @@ pub async fn get_ws(
 ) -> impl IntoResponse {
     tracing::debug!("{headers:#?}\n{ws:#?}");
 
-    ws.on_failed_upgrade(|err: axum::Error| handle_ws_err(&err))
-        .on_upgrade(move |ws| handle_ws(state, addr, headers, ws))
-}
-
-async fn handle_ws(state: SharedState, addr: SocketAddr, headers: HeaderMap, ws: WebSocket) {
-    tracing::debug!("{ws:#?}");
-
-    let (mut ws_tx, mut ws_rx) = ws.split();
-
     let Some(user_agent) = headers.get(USER_AGENT) else {
-        let msg = "deny client with missing User Agent header";
+        let msg = "client missing User Agent header";
         tracing::warn!(msg);
-        if let Err(e) = ws_tx.send(msg.into()).await {
-            tracing::error!("{e}");
-        }
-        return;
+        return (StatusCode::BAD_REQUEST, Json(msg)).into_response();
     };
 
     let Ok(user_agent) = user_agent.to_str() else {
         let msg = "failed to convert User Agent header value to String";
         tracing::error!(msg);
-        if let Err(e) = ws_tx.send(msg.into()).await {
-            tracing::error!("{e}");
-        }
-        return;
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(msg)).into_response();
     };
 
-    let (msg_tx, msg_rx) = mpsc::channel::<Message>(32);
-
     let client_id = Uuid::new_v4();
-    state
-        .connmgr()
-        .write()
-        .await
-        .insert(client_id, msg_tx.clone());
-
     state
         .clients()
         .write()
         .await
         .insert(client_id, WillowClient::new(addr, user_agent));
+
+    let state_clone = state.clone();
+
+    ws.on_failed_upgrade(move |err: axum::Error| {
+        tokio::spawn(async move {
+            handle_ws_err(state_clone, client_id, &err).await;
+        });
+    })
+    .on_upgrade(move |ws| handle_ws(state.clone(), ws, client_id))
+    .into_response()
+}
+
+async fn handle_ws(state: SharedState, ws: WebSocket, client_id: Uuid) {
+    tracing::debug!("{ws:#?}");
+
+    let (ws_tx, mut ws_rx) = ws.split();
+
+    let (msg_tx, msg_rx) = mpsc::channel::<Message>(32);
+
+    state
+        .connmgr()
+        .write()
+        .await
+        .insert(client_id, msg_tx.clone());
 
     tokio::spawn(ws_sender(ws_tx, msg_rx, client_id));
 
@@ -122,8 +124,9 @@ async fn handle_ws(state: SharedState, addr: SocketAddr, headers: HeaderMap, ws:
     state.delete_client(client_id).await;
 }
 
-fn handle_ws_err(err: &axum::Error) {
+async fn handle_ws_err(state: SharedState, client_id: Uuid, err: &axum::Error) {
     tracing::error!("{err}");
+    state.delete_client(client_id).await;
 }
 
 async fn handle_ws_msg_txt(
