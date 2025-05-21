@@ -416,7 +416,11 @@ pub async fn endpoint_ws_receiver(
                             tracing::debug!("got WebSocket PONG from Home Assistant WebSocket endpoint");
                             last_pong = Instant::now();
                         }
-                        Message::Binary(_) | Message::Close(_) | Message::Frame(_) | Message::Ping(_) => {}
+                        Message::Close(_) => {
+                            tracing::info!("received CLOSE message from Home Assistant WebSocket endpoint");
+                            break;
+                        }
+                        Message::Binary(_) | Message::Frame(_) | Message::Ping(_) => {}
                     }
                 }
             }
