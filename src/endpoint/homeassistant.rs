@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Result, anyhow};
 use axum::extract::ws::Message as AxumMessage;
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{
     net::TcpStream,
     sync::{RwLock, mpsc},
+    time::{Instant, interval},
 };
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use url::Url;
@@ -133,6 +134,8 @@ impl HomeAssistantWebSocketEndpoint {
         let (msg_tx, msg_rx) = mpsc::channel(32);
 
         self.sender = Some(msg_tx.clone());
+
+        tokio::spawn(send_ping(msg_tx.clone()));
 
         tokio::spawn(endpoint_ws_receiver(
             Arc::clone(&self.connmap),
@@ -259,6 +262,7 @@ pub struct HomeAssistentWebSocketAuthMessage {
     pub access_token: String,
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn endpoint_ws_receiver(
     connmap: ConnMap,
     connmgr: ConnMgr,
@@ -266,109 +270,124 @@ pub async fn endpoint_ws_receiver(
     msg_tx: mpsc::Sender<Message>,
     token: String,
 ) {
+    let ping_interval = Duration::from_secs(10);
+    let mut interval = interval(ping_interval);
+    let mut last_pong = Instant::now();
+    let timeout = Duration::from_secs(15);
+
     loop {
-        if let Some(Ok(msg)) = ws_rx.next().await {
-            match msg {
-                Message::Text(ref t) => {
-                    tracing::debug!("received msg: {msg}");
+        tokio::select! {
+            msg = ws_rx.next() => {
+                if let Some(Ok(msg)) = msg {
+                    match msg {
+                        Message::Text(ref t) => {
+                            tracing::debug!("received msg: {msg}");
 
-                    if let Ok(ha_msg) = serde_json::from_str::<HomeAssistantWebSocketMessage>(t) {
-                        tracing::debug!("ha_msg: {ha_msg:?}");
-                        match ha_msg.message_type {
-                            HomeAssistantWebSocketMessageType::Event => {
-                                match serde_json::from_str::<HomeAssistantEventMessage>(t) {
-                                    Err(e) => {
-                                        tracing::error!(
-                                            "failed to deserialize event message {msg:?}: {e}"
-                                        );
-                                    }
-                                    Ok(msg) => {
-                                        tracing::info!("got event from HA: {msg:?}");
+                            if let Ok(ha_msg) = serde_json::from_str::<HomeAssistantWebSocketMessage>(t) {
+                                tracing::debug!("ha_msg: {ha_msg:?}");
+                                match ha_msg.message_type {
+                                    HomeAssistantWebSocketMessageType::Event => {
+                                        match serde_json::from_str::<HomeAssistantEventMessage>(t) {
+                                            Err(e) => {
+                                                tracing::error!(
+                                                    "failed to deserialize event message {msg:?}: {e}"
+                                                );
+                                            }
+                                            Ok(msg) => {
+                                                tracing::info!("got event from HA: {msg:?}");
 
-                                        // we need to avoid prematurely removing the id from connmap
-                                        if msg.message_type.is_none()
-                                            || msg
-                                                .event
-                                                .data
-                                                .as_ref()
-                                                .is_none_or(|data| data.intent_output.is_none())
-                                        {
-                                            continue;
-                                        }
-
-                                        tracing::debug!("connmap: {connmap:?}");
-                                        tracing::debug!("connmgr: {connmgr:?}");
-                                        let Some(client_id) =
-                                            connmap.read().await.get(&msg.id).copied()
-                                        else {
-                                            tracing::error!("id {} not found in connmap", msg.id);
-                                            continue;
-                                        };
-
-                                        if let Ok(response) =
-                                            WillowMsgCmdEndpointResult::try_from(&msg)
-                                        {
-                                            let response = match serde_json::to_string(&response) {
-                                                Err(e) => {
-                                                    tracing::error!(
-                                                        "failed to serialize response {response:?}: {e}"
-                                                    );
-
-                                                    connmap.write().await.remove(&msg.id);
+                                                // we need to avoid prematurely removing the id from connmap
+                                                if msg.message_type.is_none()
+                                                    || msg
+                                                        .event
+                                                        .data
+                                                        .as_ref()
+                                                        .is_none_or(|data| data.intent_output.is_none())
+                                                {
                                                     continue;
                                                 }
-                                                Ok(response) => response,
-                                            };
 
-                                            if let Some(client_ws) =
-                                                connmgr.read().await.get(&client_id)
-                                            {
-                                                if let Err(e) = client_ws
-                                                    .send(AxumMessage::Text(response.into()))
-                                                    .await
+                                                tracing::debug!("connmap: {connmap:?}");
+                                                tracing::debug!("connmgr: {connmgr:?}");
+                                                let Some(client_id) =
+                                                    connmap.read().await.get(&msg.id).copied()
+                                                else {
+                                                    tracing::error!("id {} not found in connmap", msg.id);
+                                                    continue;
+                                                };
+
+                                                if let Ok(response) =
+                                                    WillowMsgCmdEndpointResult::try_from(&msg)
                                                 {
-                                                    tracing::error!(
-                                                        "failed to send response to Willow with client_id {client_id}: {e}"
-                                                    );
+                                                    let response = match serde_json::to_string(&response) {
+                                                        Err(e) => {
+                                                            tracing::error!(
+                                                                "failed to serialize response {response:?}: {e}"
+                                                            );
+
+                                                            connmap.write().await.remove(&msg.id);
+                                                            continue;
+                                                        }
+                                                        Ok(response) => response,
+                                                    };
+
+                                                    if let Some(client_ws) =
+                                                        connmgr.read().await.get(&client_id)
+                                                    {
+                                                        if let Err(e) = client_ws
+                                                            .send(AxumMessage::Text(response.into()))
+                                                            .await
+                                                        {
+                                                            tracing::error!(
+                                                                "failed to send response to Willow with client_id {client_id}: {e}"
+                                                            );
+                                                        }
+                                                    } else {
+                                                        tracing::error!(
+                                                            "client id {client_id} not found in connmgr"
+                                                        );
+                                                    }
                                                 }
-                                            } else {
+
+                                                connmap.write().await.remove(&msg.id);
+                                            }
+                                        }
+                                    }
+                                    HomeAssistantWebSocketMessageType::AuthRequired => {
+                                        let auth_msg = HomeAssistentWebSocketAuthMessage {
+                                            access_token: token.clone(),
+                                            message_type: HomeAssistantWebSocketMessageType::Auth,
+                                        };
+                                        if let Ok(auth_msg) = serde_json::to_string_pretty(&auth_msg) {
+                                            if let Err(e) =
+                                                msg_tx.send(Message::Text(auth_msg.into())).await
+                                            {
                                                 tracing::error!(
-                                                    "client id {client_id} not found in connmgr"
+                                                    "failed to send Auth message to Home Assistant: {e}"
                                                 );
                                             }
                                         }
-
-                                        connmap.write().await.remove(&msg.id);
                                     }
+                                    HomeAssistantWebSocketMessageType::AuthOk => {
+                                        tracing::info!("authenticated to Home Assistant WebSocket");
+                                    }
+                                    _ => {}
                                 }
                             }
-                            HomeAssistantWebSocketMessageType::AuthRequired => {
-                                let auth_msg = HomeAssistentWebSocketAuthMessage {
-                                    access_token: token.clone(),
-                                    message_type: HomeAssistantWebSocketMessageType::Auth,
-                                };
-                                if let Ok(auth_msg) = serde_json::to_string_pretty(&auth_msg) {
-                                    if let Err(e) =
-                                        msg_tx.send(Message::Text(auth_msg.into())).await
-                                    {
-                                        tracing::error!(
-                                            "failed to send Auth message to Home Assistant: {e}"
-                                        );
-                                    }
-                                }
-                            }
-                            HomeAssistantWebSocketMessageType::AuthOk => {
-                                tracing::info!("authenticated to Home Assistant WebSocket");
-                            }
-                            _ => {}
                         }
+                        Message::Pong(_) => {
+                            tracing::debug!("got WebSocket PONG from Home Assistant WebSocket endpoint");
+                            last_pong = Instant::now();
+                        }
+                        Message::Binary(_) | Message::Close(_) | Message::Frame(_) | Message::Ping(_) => {}
                     }
                 }
-                Message::Binary(_)
-                | Message::Close(_)
-                | Message::Frame(_)
-                | Message::Ping(_)
-                | Message::Pong(_) => {}
+            }
+            _ = interval.tick() => {
+                if last_pong.elapsed() > timeout {
+                    tracing::info!("no PONG from Home Assistant WebSocket endpoint");
+                    break;
+                }
             }
         }
     }
@@ -387,4 +406,14 @@ async fn endpoint_ws_sender(
     }
 
     tracing::debug!("stopping endpoint_ws_sender task");
+}
+
+async fn send_ping(msg_tx: mpsc::Sender<Message>) {
+    loop {
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        tracing::debug!("send PING to Home Assistant WebSocket endpoint");
+        if let Err(e) = msg_tx.send(Message::Ping("foo".into())).await {
+            tracing::error!("failed to send PING to Home Assistant WebSocket endpoint: {e}");
+        }
+    }
 }
