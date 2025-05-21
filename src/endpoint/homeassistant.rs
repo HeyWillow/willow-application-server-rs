@@ -9,7 +9,7 @@ use futures_util::{
 use serde::{Deserialize, Serialize};
 use tokio::{
     net::TcpStream,
-    sync::{Mutex, RwLock, mpsc},
+    sync::{Mutex, RwLock, broadcast, mpsc},
     time::{Instant, interval},
 };
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
@@ -34,6 +34,7 @@ pub struct HomeAssistantWebSocketEndpoint {
     pub connmgr: ConnMgr,
     pub next_id: Arc<Mutex<u64>>,
     pub sender: Option<mpsc::Sender<Message>>,
+    pub task_sender: Option<broadcast::Sender<()>>,
     pub token: String,
     pub url: Url,
 }
@@ -116,6 +117,7 @@ impl HomeAssistantWebSocketEndpoint {
             connmgr,
             next_id: Arc::new(Mutex::new(1)),
             sender: None,
+            task_sender: None,
             token,
             url,
         }
@@ -134,19 +136,34 @@ impl HomeAssistantWebSocketEndpoint {
 
                     // let (from_ws_msg_tx, from_ws_msg_rx) = mpsc::channel(32);
                     let (msg_tx, msg_rx) = mpsc::channel(32);
+                    let (task_tx, _) = broadcast::channel::<()>(1);
 
                     self.sender = Some(msg_tx.clone());
+                    self.task_sender = Some(task_tx.clone());
 
-                    tokio::spawn(send_ping(msg_tx.clone()));
-
-                    tokio::spawn(endpoint_ws_receiver(
+                    let hdl_ha_ping = tokio::spawn(send_ping(msg_tx.clone(), task_tx.subscribe()));
+                    let hdl_ha_receiver = tokio::spawn(endpoint_ws_receiver(
                         Arc::clone(&self.connmap),
                         Arc::clone(&self.connmgr),
                         ws_rx,
                         msg_tx,
+                        task_tx.subscribe(),
                         self.token.clone(),
                     ));
-                    tokio::spawn(endpoint_ws_sender(ws_tx, msg_rx));
+                    let hdl_ha_sender =
+                        tokio::spawn(endpoint_ws_sender(ws_tx, msg_rx, task_tx.subscribe()));
+
+                    tokio::select! {
+                        _ = hdl_ha_ping => tracing::warn!("Home Assistant WebSocket ping task exited"),
+                        _ = hdl_ha_receiver => tracing::warn!("Home Assistant WebSocket receiver task exited"),
+                        _ = hdl_ha_sender => tracing::warn!("Home Assistant WebSocket sender task exited"),
+                    }
+
+                    // send shutdown signal to tasks
+                    let _ = task_tx.send(());
+
+                    self.sender = None;
+                    self.task_sender = None;
                 }
                 Err(e) => {
                     tracing::error!("failed to connect to Home Assistant WebSocket endpoint {e}");
@@ -283,6 +300,7 @@ pub async fn endpoint_ws_receiver(
     connmgr: ConnMgr,
     mut ws_rx: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
     msg_tx: mpsc::Sender<Message>,
+    mut task_tx: broadcast::Receiver<()>,
     token: String,
 ) {
     let ping_interval = Duration::from_secs(10);
@@ -292,6 +310,10 @@ pub async fn endpoint_ws_receiver(
 
     loop {
         tokio::select! {
+            _ = task_tx.recv() => {
+                tracing::info!("receiver task received shutdown signal");
+                break;
+            }
             msg = ws_rx.next() => {
                 if let Some(Ok(msg)) = msg {
                     match msg {
@@ -411,24 +433,43 @@ pub async fn endpoint_ws_receiver(
 async fn endpoint_ws_sender(
     mut ws_tx: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     mut msg_rx: mpsc::Receiver<Message>,
+    mut task_tx: broadcast::Receiver<()>,
 ) {
-    while let Some(msg) = msg_rx.recv().await {
-        tracing::debug!("sending to endpoint: {msg}");
+    loop {
+        tokio::select! {
+            _ = task_tx.recv() => {
+                tracing::info!("sender task received shutdown signal");
+                break;
+            }
+            msg = msg_rx.recv() => {
+                if let Some(msg) = msg {
+                    tracing::debug!("sending to endpoint: {msg}");
 
-        if let Err(e) = ws_tx.send(msg).await {
-            tracing::error!("failed to send message endpoint: {e}");
-        };
+                    if let Err(e) = ws_tx.send(msg).await {
+                        tracing::error!("failed to send message endpoint: {e}");
+                    }
+                };
+            }
+        }
     }
-
     tracing::debug!("stopping endpoint_ws_sender task");
 }
 
-async fn send_ping(msg_tx: mpsc::Sender<Message>) {
+async fn send_ping(msg_tx: mpsc::Sender<Message>, mut task_tx: broadcast::Receiver<()>) {
+    let ping_interval = Duration::from_secs(10);
+    let mut interval = interval(ping_interval);
+
     loop {
-        tokio::time::sleep(Duration::from_secs(10)).await;
-        tracing::debug!("send PING to Home Assistant WebSocket endpoint");
-        if let Err(e) = msg_tx.send(Message::Ping("foo".into())).await {
-            tracing::error!("failed to send PING to Home Assistant WebSocket endpoint: {e}");
+        tokio::select! {
+            _ = task_tx.recv() => {
+                tracing::info!("ping task received shutdown signal");
+                break;
+            }
+            _ = interval.tick() => {
+            tracing::debug!("send PING to Home Assistant WebSocket endpoint");
+            if let Err(e) = msg_tx.send(Message::Ping("foo".into())).await {
+                tracing::error!("failed to send PING to Home Assistant WebSocket endpoint: {e}");
+            }}
         }
     }
 }
