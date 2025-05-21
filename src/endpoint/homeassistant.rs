@@ -124,27 +124,36 @@ impl HomeAssistantWebSocketEndpoint {
     /// # Errors
     /// - if we fail to connect to the Home Assistent WebSocket
     pub async fn start(&mut self) -> Result<()> {
-        let (stream, _) = tokio_tungstenite::connect_async(self.url.clone()).await?;
+        let mut connect_interval = interval(Duration::from_secs(5));
 
-        let (ws_tx, ws_rx) = stream.split();
+        loop {
+            match tokio_tungstenite::connect_async(self.url.clone()).await {
+                Ok((stream, _)) => {
+                    tracing::info!("connected to Home Assistant WebSocket");
+                    let (ws_tx, ws_rx) = stream.split();
 
-        // let (from_ws_msg_tx, from_ws_msg_rx) = mpsc::channel(32);
-        let (msg_tx, msg_rx) = mpsc::channel(32);
+                    // let (from_ws_msg_tx, from_ws_msg_rx) = mpsc::channel(32);
+                    let (msg_tx, msg_rx) = mpsc::channel(32);
 
-        self.sender = Some(msg_tx.clone());
+                    self.sender = Some(msg_tx.clone());
 
-        tokio::spawn(send_ping(msg_tx.clone()));
+                    tokio::spawn(send_ping(msg_tx.clone()));
 
-        tokio::spawn(endpoint_ws_receiver(
-            Arc::clone(&self.connmap),
-            Arc::clone(&self.connmgr),
-            ws_rx,
-            msg_tx,
-            self.token.clone(),
-        ));
-        tokio::spawn(endpoint_ws_sender(ws_tx, msg_rx));
-
-        Ok(())
+                    tokio::spawn(endpoint_ws_receiver(
+                        Arc::clone(&self.connmap),
+                        Arc::clone(&self.connmgr),
+                        ws_rx,
+                        msg_tx,
+                        self.token.clone(),
+                    ));
+                    tokio::spawn(endpoint_ws_sender(ws_tx, msg_rx));
+                }
+                Err(e) => {
+                    tracing::error!("failed to connect to Home Assistant WebSocket endpoint {e}");
+                }
+            }
+            connect_interval.tick().await;
+        }
     }
 
     pub async fn next_id(&self) -> u64 {
