@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use anyhow::Result;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use homeassistant::HomeAssistantWebSocketEndpoint;
@@ -27,13 +30,14 @@ impl SendCommand for Endpoint {
 
 #[derive(Debug)]
 pub enum WebSocketEndpoint {
-    HomeAssistant(HomeAssistantWebSocketEndpoint),
+    HomeAssistant(Arc<RwLock<HomeAssistantWebSocketEndpoint>>),
 }
 
 impl SendCommand for WebSocketEndpoint {
     async fn send_cmd(&mut self, cmd: WillowMsgCmd, client_id: Uuid) -> Result<()> {
         match self {
             WebSocketEndpoint::HomeAssistant(ha_endpoint) => {
+                let mut ha_endpoint = ha_endpoint.write().await;
                 ha_endpoint.send_cmd(cmd, client_id).await
             }
         }

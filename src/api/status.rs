@@ -47,6 +47,7 @@ async fn get_api_status(
             match *endpoint {
                 Endpoint::WebSocket(ref endpoint) => match endpoint {
                     WebSocketEndpoint::HomeAssistant(endpoint) => {
+                        let endpoint = endpoint.read().await;
                         let connmap = endpoint.connmap.read().await;
                         Json(&*connmap).into_response()
                     }

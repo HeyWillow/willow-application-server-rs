@@ -25,9 +25,13 @@ async fn main() -> anyhow::Result<()> {
         WillowCommandEndpoint::HomeAssistant => {
             let token = willow_config.get_endpoint_token()?;
             let url = willow_config.get_endpoint_url()?;
-            let mut ha_endpoint =
-                HomeAssistantWebSocketEndpoint::new(Arc::clone(&connmgr), token, url);
-            ha_endpoint.start().await?;
+            let ha_endpoint = HomeAssistantWebSocketEndpoint::new(Arc::clone(&connmgr), token, url);
+            let ha_endpoint = Arc::new(RwLock::new(ha_endpoint));
+            let ha_endpoint_clone = Arc::clone(&ha_endpoint);
+            tokio::spawn(async move {
+                let mut ha_endpoint = ha_endpoint_clone.write().await;
+                ha_endpoint.start().await
+            });
 
             Endpoint::new(Endpoint::WebSocket(WebSocketEndpoint::HomeAssistant(
                 ha_endpoint,
