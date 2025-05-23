@@ -32,14 +32,28 @@ type ConnMap = Arc<RwLock<HashMap<u64, Uuid>>>;
 pub struct HomeAssistantWebSocketEndpoint {
     pub connmap: ConnMap,
     pub connmgr: ConnMgr,
-    pub next_id: Arc<Mutex<u64>>,
-    pub sender: Option<mpsc::Sender<Message>>,
-    pub task_sender: Option<broadcast::Sender<()>>,
     pub token: String,
     pub url: Url,
 }
 
-impl SendCommand for HomeAssistantWebSocketEndpoint {
+#[derive(Clone, Debug)]
+pub struct HomeAssistantWebSocketEndpointService {
+    pub connmap: ConnMap,
+    next_id: Arc<Mutex<u64>>,
+    pub sender: mpsc::Sender<Message>,
+}
+
+impl HomeAssistantWebSocketEndpointService {
+    pub async fn next_id(&self) -> u64 {
+        let mut id = self.next_id.lock().await;
+        let id_current = *id;
+        *id += 1;
+
+        id_current
+    }
+}
+
+impl SendCommand for HomeAssistantWebSocketEndpointService {
     async fn send_cmd(&mut self, cmd: WillowMsgCmd, client_id: Uuid) -> Result<()> {
         if let Some(data_type) = cmd.data {
             match data_type {
@@ -56,19 +70,13 @@ impl SendCommand for HomeAssistantWebSocketEndpoint {
                     let ha_msg = serde_json::to_string(&msg)?;
                     let ha_msg = Message::Text(ha_msg.into());
 
-                    if let Some(sender) = &self.sender {
-                        self.connmap.write().await.insert(msg.id, client_id);
-                        if let Err(e) = sender.send(ha_msg).await {
-                            let err =
-                                format!("failed to send command to Home Assistant endpoint: {e}");
-                            tracing::error!(err);
-                            self.connmap.write().await.remove(&msg.id);
-                            return Err(anyhow!(err));
-                        }
-                    } else {
-                        return Err(anyhow!(
-                            "sender for Home Assistant endpoint not initialized"
-                        ));
+                    self.connmap.write().await.insert(msg.id, client_id);
+
+                    if let Err(e) = self.sender.send(ha_msg).await {
+                        let err = format!("failed to send command to Home Assistant endpoint: {e}");
+                        tracing::error!(err);
+                        self.connmap.write().await.remove(&msg.id);
+                        return Err(anyhow!(err));
                     }
                 }
             }
@@ -115,9 +123,6 @@ impl HomeAssistantWebSocketEndpoint {
         Self {
             connmap: Arc::new(RwLock::new(HashMap::new())),
             connmgr,
-            next_id: Arc::new(Mutex::new(1)),
-            sender: None,
-            task_sender: None,
             token,
             url,
         }
@@ -125,60 +130,67 @@ impl HomeAssistantWebSocketEndpoint {
 
     /// # Errors
     /// - if we fail to connect to the Home Assistent WebSocket
-    pub async fn start(&mut self) -> Result<()> {
-        let mut connect_interval = interval(Duration::from_secs(5));
+    pub async fn start(self) -> Result<HomeAssistantWebSocketEndpointService> {
+        let connmap = Arc::clone(&self.connmap);
+        let connmgr = Arc::clone(&self.connmgr);
 
-        loop {
-            match tokio_tungstenite::connect_async(self.url.clone()).await {
-                Ok((stream, _)) => {
-                    tracing::info!("connected to Home Assistant WebSocket");
-                    let (ws_tx, ws_rx) = stream.split();
+        // let (from_ws_msg_tx, from_ws_msg_rx) = mpsc::channel(32);
+        let (msg_tx, msg_rx) = mpsc::channel(32);
+        let (task_tx, _) = broadcast::channel::<()>(1);
 
-                    // let (from_ws_msg_tx, from_ws_msg_rx) = mpsc::channel(32);
-                    let (msg_tx, msg_rx) = mpsc::channel(32);
-                    let (task_tx, _) = broadcast::channel::<()>(1);
+        // self.task_sender = Some(task_tx.clone());
+        let service = HomeAssistantWebSocketEndpointService {
+            connmap: self.connmap.clone(),
+            next_id: Arc::new(Mutex::new(1)),
+            sender: msg_tx.clone(),
+        };
 
-                    self.sender = Some(msg_tx.clone());
-                    self.task_sender = Some(task_tx.clone());
+        tokio::spawn(async move {
+            let mut connect_interval = interval(Duration::from_secs(5));
 
-                    let hdl_ha_ping = tokio::spawn(send_ping(msg_tx.clone(), task_tx.subscribe()));
-                    let hdl_ha_receiver = tokio::spawn(endpoint_ws_receiver(
-                        Arc::clone(&self.connmap),
-                        Arc::clone(&self.connmgr),
-                        ws_rx,
-                        msg_tx,
-                        task_tx.subscribe(),
-                        self.token.clone(),
-                    ));
-                    let hdl_ha_sender =
-                        tokio::spawn(endpoint_ws_sender(ws_tx, msg_rx, task_tx.subscribe()));
+            loop {
+                connect_interval.tick().await;
 
-                    tokio::select! {
-                        _ = hdl_ha_ping => tracing::warn!("Home Assistant WebSocket ping task exited"),
-                        _ = hdl_ha_receiver => tracing::warn!("Home Assistant WebSocket receiver task exited"),
-                        _ = hdl_ha_sender => tracing::warn!("Home Assistant WebSocket sender task exited"),
+                match tokio_tungstenite::connect_async(self.url.clone()).await {
+                    Ok((stream, _)) => {
+                        tracing::info!("connected to Home Assistant WebSocket");
+                        let (ws_tx, ws_rx) = stream.split();
+
+                        let msg_rx = msg_rx;
+                        let msg_tx = msg_tx.clone();
+
+                        let hdl_ha_ping =
+                            tokio::spawn(send_ping(msg_tx.clone(), task_tx.subscribe()));
+                        let hdl_ha_receiver = tokio::spawn(endpoint_ws_receiver(
+                            Arc::clone(&connmap),
+                            Arc::clone(&connmgr),
+                            ws_rx,
+                            msg_tx,
+                            task_tx.subscribe(),
+                            self.token.clone(),
+                        ));
+                        let hdl_ha_sender =
+                            tokio::spawn(endpoint_ws_sender(ws_tx, msg_rx, task_tx.subscribe()));
+
+                        tokio::select! {
+                            _ = hdl_ha_ping => tracing::warn!("Home Assistant WebSocket ping task exited"),
+                            _ = hdl_ha_receiver => tracing::warn!("Home Assistant WebSocket receiver task exited"),
+                            _ = hdl_ha_sender => tracing::warn!("Home Assistant WebSocket sender task exited"),
+                        }
+
+                        // send shutdown signal to tasks
+                        let _ = task_tx.send(());
                     }
-
-                    // send shutdown signal to tasks
-                    let _ = task_tx.send(());
-
-                    self.sender = None;
-                    self.task_sender = None;
-                }
-                Err(e) => {
-                    tracing::error!("failed to connect to Home Assistant WebSocket endpoint {e}");
+                    Err(e) => {
+                        tracing::error!(
+                            "failed to connect to Home Assistant WebSocket endpoint {e}"
+                        );
+                    }
                 }
             }
-            connect_interval.tick().await;
-        }
-    }
+        });
 
-    pub async fn next_id(&self) -> u64 {
-        let mut id = self.next_id.lock().await;
-        let id_current = *id;
-        *id += 1;
-
-        id_current
+        Ok(service)
     }
 }
 
