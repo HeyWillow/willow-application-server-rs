@@ -10,9 +10,11 @@ use uuid::Uuid;
 
 use crate::{
     db::pool::Pool,
+    endpoint::Endpoint,
     willow::{client::WillowClient, worker::WorkerData},
 };
 
+pub type ConnMgr = Arc<RwLock<HashMap<Uuid, WebsocketClientMessageSender>>>;
 pub type SharedState = Arc<WasState>;
 
 type WebsocketClientMessageSender = mpsc::Sender<Message>;
@@ -21,18 +23,25 @@ type WebsocketClientMessageSender = mpsc::Sender<Message>;
 #[derive(Debug)]
 pub struct WasState {
     clients: RwLock<HashMap<Uuid, WillowClient>>,
-    connmgr: RwLock<HashMap<Uuid, WebsocketClientMessageSender>>,
+    connmgr: ConnMgr,
     db_pool: Pool,
+    endpoint: Endpoint,
     worker_data: WorkerData,
 }
 
 impl WasState {
     #[must_use]
-    pub fn new(db_pool: Pool, worker_data: WorkerData) -> Self {
+    pub fn new(
+        connmgr: ConnMgr,
+        db_pool: Pool,
+        endpoint: Endpoint,
+        worker_data: WorkerData,
+    ) -> Self {
         Self {
             clients: RwLock::new(HashMap::new()),
-            connmgr: RwLock::new(HashMap::new()),
+            connmgr,
             db_pool,
+            endpoint,
             worker_data,
         }
     }
@@ -41,7 +50,7 @@ impl WasState {
         &self.clients
     }
 
-    pub fn connmgr(&self) -> &RwLock<HashMap<Uuid, WebsocketClientMessageSender>> {
+    pub fn connmgr(&self) -> &ConnMgr {
         &self.connmgr
     }
 

@@ -1,5 +1,6 @@
 use std::{fmt::Display, str::FromStr};
 
+use anyhow::Context;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::skip_serializing_none;
 
@@ -20,7 +21,7 @@ enum WillowAudioResponseType {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
-enum WillowCommandEndpoint {
+pub enum WillowCommandEndpoint {
     #[serde(rename = "Home Assistant")]
     HomeAssistant,
     #[serde(rename = "openHAB")]
@@ -156,6 +157,31 @@ pub struct WillowConfig {
     wis_tts_url: Option<String>,
     wis_tts_url_v2: Option<String>,
     wis_url: String,
+}
+
+impl WillowConfig {
+    pub fn get_endpoint(&self) -> &WillowCommandEndpoint {
+        &self.command_endpoint
+    }
+
+    pub fn get_homeassistant_config(&self) -> anyhow::Result<(String, u16, bool, String)> {
+        let host = self
+            .hass_host
+            .clone()
+            .context("config does not contain Home Assistant host")?;
+        let port = self
+            .hass_port
+            .context("config does not contain Home Assistant port")?;
+        let tls = self
+            .hass_tls
+            .context("config does not contain Home Assistant TLS")?;
+        let token = self
+            .hass_token
+            .clone()
+            .context("config does not contain Home Assistant token")?;
+
+        Ok((host, port, tls, token))
+    }
 }
 
 #[derive(Deserialize, Serialize)]

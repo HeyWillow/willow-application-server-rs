@@ -35,7 +35,7 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
                 .allow_origin(allow_origin),
         );
 
-    tracing::debug!("{router:#?}");
+    tracing::trace!("{router:#?}");
 
     let port = 8502;
     let address = format!("[::]:{port}");

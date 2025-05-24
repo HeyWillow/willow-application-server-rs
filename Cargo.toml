@@ -18,6 +18,7 @@ strum = { version = "0.27.1", features = ["derive"] }
 strum_macros = "0.27.1"
 thiserror = "2.0.12"
 tokio = { version = "1.45.0", features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio-tungstenite = { version = "0.26.2", features = ["rustls-tls-webpki-roots", "url"] }
 tower-http = { version = "0.6.4", features = ["cors"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
