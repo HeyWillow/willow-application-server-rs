@@ -4,12 +4,12 @@ use axum::{
     Json, Router,
     extract::Request,
     http::{HeaderValue, StatusCode},
-    response::{Html, IntoResponse},
+    response::{IntoResponse, Redirect},
     routing::get,
 };
 use reqwest::{Method, header::CONTENT_TYPE};
 use tokio::net::TcpListener;
-use tower_http::cors::CorsLayer;
+use tower_http::{cors::CorsLayer, services::ServeDir};
 
 use crate::{
     api::api_routes,
@@ -26,7 +26,8 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let router = Router::new()
         .fallback(fallback)
         .nest("/api", api_routes(&state))
-        .route("/", get(get_root))
+        .nest_service("/admin", ServeDir::new("static/admin"))
+        .route("/", get(|| async { Redirect::temporary("/admin") }))
         .route("/ws", get(get_ws).with_state(Arc::clone(&state)))
         .layer(
             CorsLayer::new()
@@ -59,8 +60,4 @@ async fn fallback(request: Request) -> impl IntoResponse {
     tracing::warn!("request for non-existent URI: {uri}",);
 
     (StatusCode::NOT_FOUND, Json(format!("invalid URI {uri}")))
-}
-
-async fn get_root() -> Html<&'static str> {
-    Html("<head><title>Willow Application Server</title></head>")
 }
